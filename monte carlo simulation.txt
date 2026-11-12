@@ -1,0 +1,217 @@
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# ==========================================
+# 1. PORTFOLIO INPUTS
+# ==========================================
+
+np.random.seed(42)
+
+initial_investment = 450000
+years = 10
+trading_days = 252
+simulations = 10000
+
+# Replace these example assets and assumptions
+# with your actual portfolio holdings.
+
+assets = ["US Equity", "International Equity",
+          "Government Bonds", "Corporate Bonds"]
+
+weights = np.array([0.35, 0.15, 0.30, 0.20])
+
+# Expected annual returns
+annual_returns = np.array([0.09, 0.08, 0.04, 0.05])
+
+# Annual standard deviations (volatility)
+annual_volatility = np.array([0.18, 0.20, 0.05, 0.07])
+
+# Asset correlation matrix
+correlation = np.array([
+    [1.00, 0.70, -0.10, 0.20],
+    [0.70, 1.00, -0.05, 0.15],
+    [-0.10, -0.05, 1.00, 0.40],
+    [0.20, 0.15, 0.40, 1.00]
+])
+
+# ==========================================
+# 2. VALIDATE PORTFOLIO INPUTS
+# ==========================================
+
+if not np.isclose(weights.sum(), 1.0):
+    raise ValueError("Portfolio weights must sum to 100%.")
+
+if not np.allclose(correlation, correlation.T):
+    raise ValueError("Correlation matrix must be symmetric.")
+
+if np.any(np.linalg.eigvalsh(correlation) < -1e-8):
+    raise ValueError("Correlation matrix must be positive semidefinite.")
+
+# Convert annual assumptions into daily assumptions
+daily_returns = annual_returns / trading_days
+daily_volatility = annual_volatility / np.sqrt(trading_days)
+
+# Daily covariance matrix
+covariance = np.outer(
+    daily_volatility, daily_volatility
+) * correlation
+
+# ==========================================
+# 3. MONTE CARLO SIMULATION
+# ==========================================
+
+portfolio_values = np.zeros(
+    (trading_days * years + 1, simulations)
+)
+
+portfolio_values[0] = initial_investment
+
+# Generate correlated daily asset returns
+daily_random_returns = np.random.multivariate_normal(
+    daily_returns,
+    covariance,
+    size=(trading_days * years, simulations)
+)
+
+# Calculate daily portfolio returns
+daily_portfolio_returns = np.sum(
+    daily_random_returns * weights,
+    axis=2
+)
+
+# Calculate portfolio value over time
+for day in range(1, trading_days * years + 1):
+
+    portfolio_values[day] = (
+        portfolio_values[day - 1]
+        * (1 + daily_portfolio_returns[day - 1])
+    )
+
+# ==========================================
+# 4. FINAL PORTFOLIO RESULTS
+# ==========================================
+
+final_values = portfolio_values[-1]
+
+mean_value = np.mean(final_values)
+median_value = np.median(final_values)
+
+percentile_5 = np.percentile(final_values, 5)
+percentile_25 = np.percentile(final_values, 25)
+percentile_75 = np.percentile(final_values, 75)
+percentile_95 = np.percentile(final_values, 95)
+
+probability_loss = np.mean(
+    final_values < initial_investment
+) * 100
+
+print("\nMONTE CARLO SIMULATION RESULTS")
+print("--------------------------------")
+
+print(f"Initial Investment: ${initial_investment:,.2f}")
+print(f"Mean Final Value: ${mean_value:,.2f}")
+print(f"Median Final Value: ${median_value:,.2f}")
+
+print(f"5th Percentile: ${percentile_5:,.2f}")
+print(f"25th Percentile: ${percentile_25:,.2f}")
+print(f"75th Percentile: ${percentile_75:,.2f}")
+print(f"95th Percentile: ${percentile_95:,.2f}")
+
+print(f"Probability of Loss: {probability_loss:.2f}%")
+
+# ==========================================
+# 5. PLOT SIMULATED PORTFOLIO PATHS
+# ==========================================
+
+plt.figure(figsize=(12, 6))
+
+plt.plot(
+    portfolio_values[:, :100],
+    linewidth=0.7,
+    alpha=0.35
+)
+
+plt.title("Monte Carlo Simulation - Portfolio Growth")
+plt.xlabel("Trading Days")
+plt.ylabel("Portfolio Value ($)")
+plt.grid(alpha=0.3)
+
+plt.show()
+
+# ==========================================
+# 6. FINAL VALUE DISTRIBUTION
+# ==========================================
+
+plt.figure(figsize=(12, 6))
+
+plt.hist(
+    final_values,
+    bins=60,
+    density=True,
+    alpha=0.7,
+    edgecolor="black"
+)
+
+plt.axvline(
+    mean_value,
+    linestyle="--",
+    linewidth=2,
+    label="Mean"
+)
+
+plt.axvline(
+    percentile_5,
+    linestyle="--",
+    label="5th Percentile"
+)
+
+plt.axvline(
+    percentile_95,
+    linestyle="--",
+    label="95th Percentile"
+)
+
+plt.title("Distribution of Final Portfolio Values")
+plt.xlabel("Portfolio Value ($)")
+plt.ylabel("Probability Density")
+plt.legend()
+plt.grid(alpha=0.3)
+
+plt.show()
+
+# ==========================================
+# 7. ANNUAL PORTFOLIO SUMMARY
+# ==========================================
+
+annual_indices = np.arange(
+    0, years * trading_days + 1, trading_days
+)
+
+annual_summary = pd.DataFrame({
+    "Year": np.arange(years + 1),
+    "Mean Portfolio Value": np.mean(
+        portfolio_values[annual_indices], axis=1
+    ),
+    "Median Portfolio Value": np.median(
+        portfolio_values[annual_indices], axis=1
+    ),
+    "5th Percentile": np.percentile(
+        portfolio_values[annual_indices], 5, axis=1
+    ),
+    "95th Percentile": np.percentile(
+        portfolio_values[annual_indices], 95, axis=1
+    )
+})
+
+print("\nANNUAL PORTFOLIO PROJECTIONS")
+print(annual_summary.round(2).to_string(index=False))
+
+# Export results to Excel
+annual_summary.to_excel(
+    "Monte_Carlo_Annual_Results.xlsx",
+    index=False
+)
+
+print("\nExcel results exported successfully.")
